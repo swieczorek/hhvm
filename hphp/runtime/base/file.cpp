@@ -193,6 +193,40 @@ int File::getc() {
   return (int)(unsigned char)buffer[0];
 }
 
+String File::read() {
+  String s = String(CHUNK_SIZE, ReserveString);
+  char *ret = s.bufferSlice().ptr;
+  int64_t copied = 0;
+  int64_t avail = bufferedLen();
+
+  while (!eof()) {
+    if (m_buffer == nullptr) {
+      m_buffer = (char *)malloc(CHUNK_SIZE);
+    }
+
+    if (avail > 0) {
+      memcpy(ret + copied, m_buffer + m_readpos, avail);
+      copied += avail;
+    }
+
+    m_writepos = readImpl(m_buffer, CHUNK_SIZE);
+    m_readpos = 0;
+    avail = bufferedLen();
+
+    if (avail == 0 || m_nonblocking) {
+      // For nonblocking mode, temporary out of data.
+      break;
+    }
+
+    if (copied + avail >= s->capacity()) {
+      s.reserve(s->capacity() + CHUNK_SIZE);
+    }
+  }
+
+  m_position += copied;
+  return s.setSize(copied);
+}
+
 String File::read(int64_t length) {
   if (length <= 0) {
     raise_notice("Invalid length %" PRId64, length);
